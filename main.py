@@ -21,7 +21,6 @@ def run(args: DictConfig):
     if args.use_wandb:
         wandb.init(mode="online", dir=logdir, project="MEG-classification")
 
-    # DataLoader setup with augmentation
     loader_args = {"batch_size": args.batch_size, "num_workers": args.num_workers}
 
     train_set = ThingsMEGDataset("train", args.data_dir, augment=True)
@@ -31,24 +30,19 @@ def run(args: DictConfig):
     test_set = ThingsMEGDataset("test", args.data_dir)
     test_loader = torch.utils.data.DataLoader(test_set, shuffle=False, **loader_args)
 
-    # Model setup with dropout and batch normalization
     model = BasicConvClassifier(
         train_set.num_classes, train_set.seq_len, train_set.num_channels
     ).to(args.device)
 
-    # Optimizer setup
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-    # Learning rate scheduler
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2, verbose=True)
 
-    # Metrics
     max_val_acc = 0
     accuracy = Accuracy(
         task="multiclass", num_classes=train_set.num_classes, top_k=10
     ).to(args.device)
 
-    # Early stopping parameters
     early_stopping_patience = 5
     early_stopping_counter = 0
     best_val_loss = float('inf')
@@ -58,7 +52,6 @@ def run(args: DictConfig):
 
         train_loss, train_acc, val_loss, val_acc = [], [], [], []
 
-        # Training loop
         model.train()
         for X, y, subject_idxs in tqdm(train_loader, desc="Train"):
             X, y = X.to(args.device), y.to(args.device)
@@ -71,7 +64,6 @@ def run(args: DictConfig):
             acc = accuracy(y_pred, y)
             train_acc.append(acc.item())
 
-        # Validation loop
         model.eval()
         for X, y, subject_idxs in tqdm(val_loader, desc="Validation"):
             X, y = X.to(args.device), y.to(args.device)
@@ -102,7 +94,6 @@ def run(args: DictConfig):
             torch.save(model.state_dict(), os.path.join(logdir, "model_best.pt"))
             max_val_acc = avg_val_acc
 
-        # Early stopping logic
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             early_stopping_counter = 0
@@ -112,10 +103,8 @@ def run(args: DictConfig):
                 print("Early stopping triggered")
                 break
 
-        # Adjust the learning rate based on the validation loss
         scheduler.step(avg_val_loss)
 
-    # Evaluation with best model
     model.load_state_dict(torch.load(os.path.join(logdir, "model_best.pt"), map_location=args.device))
 
     preds = []
